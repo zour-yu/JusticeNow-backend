@@ -21,6 +21,10 @@ config/firebaseServiceAccountKey.json
 *.swp
 *.swo
 *~
+
+# Ignore all markdown files except README.md
+*.md
+!README.md
 .DS_Store
 
 # Build

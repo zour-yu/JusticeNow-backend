@@ -10,6 +10,10 @@ yarn-error.log*
 .env.local
 .env.*.local
 
+# Firebase keys
+firebaseServiceAccountKey.json
+config/firebaseServiceAccountKey.json
+
 # IDE
 .vscode/
 .idea/

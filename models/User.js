@@ -36,7 +36,7 @@ const userSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['ACTIVE', 'SUSPENDED'],
+      enum: ['ACTIVE', 'SUSPENDED','INACTIVE'],
       default: 'ACTIVE',
     },
     isProfileComplete: {

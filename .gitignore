@@ -16,6 +16,11 @@ lerna-debug.log*
 .env.*
 !.env.example
 
+# Custom Agent Documentation
+AGENTS.md
+*.md
+!README.md
+
 # IDE & OS files
 .DS_Store
 Thumbs.db

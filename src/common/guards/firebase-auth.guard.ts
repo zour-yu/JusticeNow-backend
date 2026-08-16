@@ -5,7 +5,7 @@ import {
   UnauthorizedException,
   ForbiddenException,
 } from '@nestjs/common';
-import { FirebaseService } from '../../config/firebase/firebase.service';
+import { FirebaseService } from '../../config/firebase.service';
 import { UsersService } from '../../users/users.service';
 import { UserStatus } from '../../users/schemas/user.schema';
 

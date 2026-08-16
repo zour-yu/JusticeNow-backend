@@ -20,17 +20,20 @@ const protect = async (req, res, next) => {
     const user = await User.findOne({ firebaseUid: decodedToken.uid });
 
     if (!user) {
-      throw new ApiError(404, 'User not found. Please complete registration.');
-    }
+      // Allow new users to bypass user lookup ONLY on the sync endpoint
+      if (!req.originalUrl.includes('/sync')) {
+        throw new ApiError(404, 'User not found. Please complete registration.');
+      }
+    } else {
+      // Check if user is suspended
+      if (user.status === 'SUSPENDED') {
+        throw new ApiError(403, 'Your account has been suspended. Contact support.');
+      }
 
-    // Check if user is suspended
-    if (user.status === 'SUSPENDED') {
-      throw new ApiError(403, 'Your account has been suspended. Contact support.');
-    }
-
-    // Check if user is inactive
-    if (user.status === 'INACTIVE') {
-      throw new ApiError(403, 'Your account is inactive.');
+      // Check if user is inactive
+      if (user.status === 'INACTIVE') {
+        throw new ApiError(403, 'Your account is inactive.');
+      }
     }
 
     // Attach user and decoded token to request object

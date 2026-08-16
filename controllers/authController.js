@@ -45,4 +45,25 @@ const getCurrentUser = async (req, res, next) => {
   }
 };
 
-module.exports = { syncUser, getCurrentUser };
+// Update user profile (e.g. for profile completion)
+const updateProfile = async (req, res, next) => {
+  try {
+    const { firstName, lastName, phone } = req.body;
+    const user = req.user; // from protect middleware
+
+    if (firstName) user.firstName = firstName;
+    if (lastName) user.lastName = lastName;
+    if (phone) {
+      user.phone = phone;
+      // If phone is provided, profile is considered complete
+      user.isProfileComplete = true;
+    }
+
+    await user.save();
+    return res.status(200).json(new ApiResponse(200, user, 'Profile updated successfully'));
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports = { syncUser, getCurrentUser, updateProfile };

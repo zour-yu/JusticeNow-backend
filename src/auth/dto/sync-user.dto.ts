@@ -12,4 +12,7 @@ export class SyncUserDto {
   @IsOptional()
   @IsString()
   phone?: string;
+
+  @IsOptional()
+  role?: string;
 }

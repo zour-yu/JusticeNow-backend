@@ -1,6 +1,6 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { UsersService } from '../users/users.service';
-import { UserDocument } from '../users/schemas/user.schema';
+import { UserDocument, UserRole, UserStatus } from '../users/schemas/user.schema';
 import { SyncUserDto } from './dto/sync-user.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { DecodedIdToken } from 'firebase-admin/auth';
@@ -23,6 +23,14 @@ export class AuthService {
     }
 
     const hasPhone = Boolean(dto.phone && dto.phone.trim() !== '');
+    
+    let role = UserRole.CITIZEN;
+    let status = UserStatus.ACTIVE;
+
+    if (dto.role === 'INVESTIGATOR') {
+      role = UserRole.INVESTIGATOR;
+      status = UserStatus.PENDING;
+    }
 
     return this.usersService.createUser({
       firebaseUid: firebaseUser.uid,
@@ -30,6 +38,8 @@ export class AuthService {
       firstName: dto.firstName,
       lastName: dto.lastName,
       phone: dto.phone || '',
+      role,
+      status,
       isProfileComplete: hasPhone,
     });
   }

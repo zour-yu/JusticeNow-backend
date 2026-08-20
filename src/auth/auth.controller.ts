@@ -3,6 +3,7 @@ import {
   Post,
   Get,
   Put,
+  Delete,
   Body,
   UseGuards,
   HttpCode,
@@ -59,6 +60,20 @@ export class AuthController {
       statusCode: HttpStatus.OK,
       message: 'Profile updated successfully',
       data: updatedUser,
+    };
+  }
+
+  @Delete('account')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(FirebaseAuthGuard)
+  async deleteAccount(
+    @FirebaseUser() firebaseUser: AdminAuth.DecodedIdToken,
+  ) {
+    await this.authService.deleteAccount(firebaseUser);
+    return {
+      success: true,
+      statusCode: HttpStatus.OK,
+      message: 'Account deleted successfully',
     };
   }
 }

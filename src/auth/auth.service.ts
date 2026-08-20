@@ -4,10 +4,14 @@ import { UserDocument, UserRole, UserStatus } from '../users/schemas/user.schema
 import { SyncUserDto } from './dto/sync-user.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { DecodedIdToken } from 'firebase-admin/auth';
+import { FirebaseService } from '../config/firebase.service';
 
 @Injectable()
 export class AuthService {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly firebaseService: FirebaseService,
+  ) {}
 
   async syncUser(
     firebaseUser: DecodedIdToken,
@@ -68,5 +72,11 @@ export class AuthService {
     }
 
     return updatedUser;
+  }
+  async deleteAccount(firebaseUser: DecodedIdToken): Promise<void> {
+    // 1. Delete from MongoDB
+    await this.usersService.deleteByFirebaseUid(firebaseUser.uid);
+    // 2. Delete from Firebase Auth
+    await this.firebaseService.getAuth().deleteUser(firebaseUser.uid);
   }
 }

@@ -39,4 +39,7 @@ export class UsersService {
       .findOneAndUpdate({ firebaseUid }, { $set: updateData }, { new: true })
       .exec();
   }
+  async deleteByFirebaseUid(firebaseUid: string): Promise<void> {
+    await this.userModel.findOneAndDelete({ firebaseUid }).exec();
+  }
 }

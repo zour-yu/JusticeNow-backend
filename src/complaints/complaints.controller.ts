@@ -13,12 +13,14 @@ import {
 import { ComplaintsService } from './complaints.service';
 import { CreateComplaintDto } from './dto/create-complaint.dto';
 import { UpdateComplaintStatusDto } from './dto/update-complaint-status.dto';
+import { ReviewComplaintDto } from './dto/review-complaint.dto';
+import { AssignComplaintCategoryDto } from './dto/assign-complaint-category.dto';
 import { FirebaseAuthGuard } from '../common/guards/firebase-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { User, UserRole } from '../users/schemas/user.schema';
-import { ComplaintStatus } from './schemas/complaint.schema';
+import { ComplaintCategory, ComplaintStatus } from './schemas/complaint.schema';
 
 @Controller('complaints')
 @UseGuards(FirebaseAuthGuard)
@@ -67,12 +69,45 @@ export class ComplaintsController {
   @Get('all')
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.INVESTIGATOR)
-  async getAllComplaints(@Query('status') status?: ComplaintStatus) {
-    const complaints = await this.complaintsService.findAll(status);
+  async getAllComplaints(
+    @Query('status') status?: ComplaintStatus,
+    @Query('category') category?: ComplaintCategory,
+  ) {
+    const complaints = await this.complaintsService.findAll(status, category);
     return {
       success: true,
       statusCode: HttpStatus.OK,
       message: 'All complaints retrieved successfully',
+      data: complaints,
+    };
+  }
+
+  @Patch(':id/category')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async assignCategory(
+    @Param('id') id: string,
+    @Body() dto: AssignComplaintCategoryDto,
+    @CurrentUser() user: User,
+  ) {
+    const complaint = await this.complaintsService.assignCategory(id, dto, user);
+    return {
+      success: true,
+      statusCode: HttpStatus.OK,
+      message: 'Complaint category assigned successfully',
+      data: complaint,
+    };
+  }
+
+  @Get('pending')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async getPendingComplaints() {
+    const complaints = await this.complaintsService.findNewlySubmitted();
+    return {
+      success: true,
+      statusCode: HttpStatus.OK,
+      message: 'Newly submitted complaints retrieved successfully',
       data: complaints,
     };
   }
@@ -109,6 +144,23 @@ export class ComplaintsController {
       statusCode: HttpStatus.OK,
       message: 'Complaint status updated successfully',
       data: updatedComplaint,
+    };
+  }
+
+  @Patch(':id/review')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async reviewComplaint(
+    @Param('id') id: string,
+    @Body() dto: ReviewComplaintDto,
+    @CurrentUser() user: User,
+  ) {
+    const complaint = await this.complaintsService.reviewComplaint(id, dto, user);
+    return {
+      success: true,
+      statusCode: HttpStatus.OK,
+      message: `Complaint ${dto.decision.toLowerCase()} successfully`,
+      data: complaint,
     };
   }
 }

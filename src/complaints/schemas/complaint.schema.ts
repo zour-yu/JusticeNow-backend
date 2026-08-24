@@ -147,6 +147,15 @@ export class Complaint {
 
   @Prop({ default: '' })
   adminReviewNotes?: string;
+
+  @Prop({ type: String, enum: ['APPROVED', 'REJECTED'], default: null })
+  adminReviewDecision?: 'APPROVED' | 'REJECTED';
+
+  @Prop({ default: null })
+  adminReviewerId?: string;
+
+  @Prop({ default: null })
+  adminReviewedAt?: Date;
 }
 
 export const ComplaintSchema = SchemaFactory.createForClass(Complaint);

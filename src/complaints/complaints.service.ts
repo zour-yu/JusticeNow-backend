@@ -10,9 +10,15 @@ import {
   Complaint,
   ComplaintDocument,
   ComplaintStatus,
+  ComplaintCategory,
 } from './schemas/complaint.schema';
 import { CreateComplaintDto } from './dto/create-complaint.dto';
 import { UpdateComplaintStatusDto } from './dto/update-complaint-status.dto';
+import { AssignComplaintCategoryDto } from './dto/assign-complaint-category.dto';
+import {
+  ComplaintReviewDecision,
+  ReviewComplaintDto,
+} from './dto/review-complaint.dto';
 import { User, UserRole } from '../users/schemas/user.schema';
 
 @Injectable()
@@ -99,9 +105,83 @@ export class ComplaintsService {
     return complaint;
   }
 
-  async findAll(status?: ComplaintStatus): Promise<Complaint[]> {
-    const filter = status ? { status } : {};
+  async findAll(
+    status?: ComplaintStatus,
+    category?: ComplaintCategory,
+  ): Promise<Complaint[]> {
+    const filter: Record<string, ComplaintStatus | ComplaintCategory> = {};
+    if (status) filter.status = status;
+    if (category) filter.category = category;
     return await this.complaintModel.find(filter).sort({ createdAt: -1 }).exec();
+  }
+
+  async assignCategory(
+    id: string,
+    dto: AssignComplaintCategoryDto,
+    adminUser: User,
+  ): Promise<Complaint> {
+    const complaint = await this.complaintModel.findById(id).exec();
+    if (!complaint) {
+      throw new NotFoundException(`Complaint not found with ID: ${id}`);
+    }
+
+    if (complaint.status !== ComplaintStatus.SUBMITTED) {
+      throw new BadRequestException('Only submitted complaints can be categorized.');
+    }
+
+    complaint.category = dto.category;
+    const adminName = `${adminUser.firstName || ''} ${adminUser.lastName || ''}`.trim() || 'Administrator';
+    complaint.statusTimeline.push({
+      status: complaint.status,
+      title: 'Complaint Categorized',
+      note: `Complaint categorized as ${dto.category.replace(/_/g, ' ')} by ${adminName}.`,
+      updatedBy: adminName,
+      timestamp: new Date(),
+    });
+
+    return await complaint.save();
+  }
+
+  async findNewlySubmitted(): Promise<Complaint[]> {
+    return await this.complaintModel
+      .find({ status: ComplaintStatus.SUBMITTED })
+      .sort({ createdAt: -1 })
+      .exec();
+  }
+
+  async reviewComplaint(
+    id: string,
+    dto: ReviewComplaintDto,
+    adminUser: User,
+  ): Promise<Complaint> {
+    const complaint = await this.complaintModel.findById(id).exec();
+    if (!complaint) {
+      throw new NotFoundException(`Complaint not found with ID: ${id}`);
+    }
+
+    if (complaint.status !== ComplaintStatus.SUBMITTED) {
+      throw new BadRequestException('Only newly submitted complaints can be reviewed.');
+    }
+
+    const reviewerName = `${adminUser.firstName || ''} ${adminUser.lastName || ''}`.trim() || 'Administrator';
+    const status = dto.decision === ComplaintReviewDecision.APPROVED
+      ? ComplaintStatus.APPROVED
+      : ComplaintStatus.REJECTED;
+
+    complaint.status = status;
+    complaint.adminReviewDecision = dto.decision;
+    complaint.adminReviewNotes = dto.note || '';
+    complaint.adminReviewerId = adminUser.firebaseUid || (adminUser as any)._id?.toString();
+    complaint.adminReviewedAt = new Date();
+    complaint.statusTimeline.push({
+      status,
+      title: `Complaint ${dto.decision === ComplaintReviewDecision.APPROVED ? 'Approved' : 'Rejected'}`,
+      note: dto.note || `Complaint was reviewed by ${reviewerName}.`,
+      updatedBy: reviewerName,
+      timestamp: complaint.adminReviewedAt,
+    });
+
+    return await complaint.save();
   }
 
   async updateStatus(
@@ -139,6 +219,10 @@ export class ComplaintsService {
     const approved = await this.complaintModel.countDocuments({ status: ComplaintStatus.APPROVED }).exec();
     const converted = await this.complaintModel.countDocuments({ status: ComplaintStatus.CONVERTED_TO_CASE }).exec();
     const rejected = await this.complaintModel.countDocuments({ status: ComplaintStatus.REJECTED }).exec();
+    const categoryCounts = await this.complaintModel.aggregate([
+      { $group: { _id: '$category', count: { $sum: 1 } } },
+      { $sort: { _id: 1 } },
+    ]).exec();
 
     return {
       total,
@@ -147,6 +231,10 @@ export class ComplaintsService {
       approved,
       converted,
       rejected,
+      byCategory: categoryCounts.reduce(
+        (counts, item) => ({ ...counts, [item._id]: item.count }),
+        {},
+      ),
     };
   }
 }

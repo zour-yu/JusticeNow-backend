@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { User, UserDocument, UserRole, UserStatus } from './schemas/user.schema';
@@ -39,6 +39,7 @@ export class UsersService {
       .findOneAndUpdate({ firebaseUid }, { $set: updateData }, { new: true })
       .exec();
   }
+
   async findInvestigators(): Promise<UserDocument[]> {
     return this.userModel
       .find({
@@ -47,6 +48,58 @@ export class UsersService {
       } as any)
       .sort({ firstName: 1 })
       .exec();
+  }
+
+  async findPendingInvestigators(): Promise<UserDocument[]> {
+    return this.userModel
+      .find({
+        role: UserRole.INVESTIGATOR,
+        status: UserStatus.PENDING,
+      } as any)
+      .sort({ createdAt: -1 })
+      .exec();
+  }
+
+  async findAllInvestigators(): Promise<UserDocument[]> {
+    return this.userModel
+      .find({
+        role: UserRole.INVESTIGATOR,
+      } as any)
+      .sort({ createdAt: -1 })
+      .exec();
+  }
+
+  async approveInvestigator(idOrUid: string): Promise<UserDocument> {
+    return this.updateUserStatus(idOrUid, UserStatus.ACTIVE);
+  }
+
+  async rejectInvestigator(idOrUid: string): Promise<UserDocument> {
+    return this.updateUserStatus(idOrUid, UserStatus.INACTIVE);
+  }
+
+  async updateUserStatus(idOrUid: string, status: UserStatus): Promise<UserDocument> {
+    let user: UserDocument | null = null;
+
+    try {
+      user = await this.userModel.findById(idOrUid).exec();
+    } catch {
+      // not a mongo id
+    }
+
+    if (!user) {
+      user = await this.userModel.findOne({ firebaseUid: idOrUid }).exec();
+    }
+
+    if (!user) {
+      user = await this.userModel.findOne({ email: idOrUid.toLowerCase() }).exec();
+    }
+
+    if (!user) {
+      throw new NotFoundException(`User not found with identifier: ${idOrUid}`);
+    }
+
+    user.status = status;
+    return await user.save();
   }
 
   async deleteByFirebaseUid(firebaseUid: string): Promise<void> {

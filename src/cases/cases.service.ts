@@ -317,7 +317,7 @@ export class CasesService {
     return await this.caseModel.find(filter).sort({ updatedAt: -1 }).exec();
   }
 
-  async findAll(user: User, status?: CaseStatus): Promise<Case[]> {
+  async findAll(user: User, status?: CaseStatus): Promise<any[]> {
     if (user.role === UserRole.INVESTIGATOR) {
       return this.findAssignedCases(user, status);
     }
@@ -325,7 +325,59 @@ export class CasesService {
     const filter: Record<string, any> = {};
     if (status) filter.status = status;
 
-    return await this.caseModel.find(filter).sort({ updatedAt: -1 }).exec();
+    const cases = await this.caseModel.find(filter).sort({ updatedAt: -1 }).exec();
+
+    // Also include approved complaints awaiting assignment
+    if (!status || status === CaseStatus.ASSIGNED) {
+      const approvedComplaints = await this.complaintModel
+        .find({
+          status: ComplaintStatus.APPROVED,
+          $or: [{ caseId: { $exists: false } }, { caseId: '' }, { caseId: null }],
+        })
+        .sort({ updatedAt: -1 })
+        .exec();
+
+      const virtualUnassignedCases = approvedComplaints.map((comp) => {
+        const createdAt = (comp as any).createdAt || new Date();
+        const updatedAt = (comp as any).updatedAt || createdAt;
+
+        return {
+          _id: (comp as any)._id?.toString(),
+          caseNumber: comp.trackingNumber,
+          complaintId: comp.trackingNumber,
+          title: comp.title,
+          description: comp.description,
+          category: comp.category,
+          priority: comp.priority || CasePriority.MEDIUM,
+          status: CaseStatus.ASSIGNED,
+          assignedInvestigatorId: '',
+          assignedInvestigatorName: '',
+          assignedInvestigatorEmail: '',
+          assignedBy: '',
+          assignedAt: updatedAt,
+          complaintDetails: {
+            trackingNumber: comp.trackingNumber,
+            citizenName: comp.citizenName,
+            citizenEmail: comp.citizenEmail,
+            citizenPhone: comp.citizenPhone,
+            isAnonymous: comp.isAnonymous,
+            incidentDate: comp.incidentDate,
+            incidentLocation: comp.incidentLocation,
+            description: comp.description,
+            witnessInfo: comp.witnessInfo,
+          },
+          evidence: comp.evidence || [],
+          investigationNotes: [],
+          statusTimeline: comp.statusTimeline || [],
+          createdAt,
+          updatedAt,
+        };
+      });
+
+      return [...virtualUnassignedCases, ...cases];
+    }
+
+    return cases;
   }
 
   async findById(idOrCaseNumber: string, user?: User): Promise<CaseDocument> {

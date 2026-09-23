@@ -6,6 +6,7 @@ import { Case, CaseSchema } from './schemas/case.schema';
 import { Complaint, ComplaintSchema } from '../complaints/schemas/complaint.schema';
 import { FirebaseModule } from '../config/firebase.module';
 import { UsersModule } from '../users/users.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { UsersModule } from '../users/users.module';
     ]),
     FirebaseModule,
     UsersModule,
+    NotificationsModule,
   ],
   controllers: [CasesController],
   providers: [CasesService],

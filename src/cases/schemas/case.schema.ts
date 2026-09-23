@@ -5,10 +5,9 @@ import { ComplaintCategory, LocationDetails, EvidenceItem } from '../../complain
 export type CaseDocument = Case & Document;
 
 export enum CaseStatus {
-  ASSIGNED = 'ASSIGNED',
+  NEW = 'NEW',
+  PENDING = 'PENDING',
   UNDER_INVESTIGATION = 'UNDER_INVESTIGATION',
-  EVIDENCE_COLLECTION = 'EVIDENCE_COLLECTION',
-  REPORT_SUBMITTED = 'REPORT_SUBMITTED',
   RESOLVED = 'RESOLVED',
   CLOSED = 'CLOSED',
 }
@@ -113,15 +112,15 @@ export class Case {
   @Prop({
     type: String,
     enum: CaseStatus,
-    default: CaseStatus.ASSIGNED,
+    default: CaseStatus.NEW,
     index: true,
   })
   status: CaseStatus;
 
-  @Prop({ required: true, index: true })
-  assignedInvestigatorId: string; // Firebase UID or Mongo User ID of investigator
+  @Prop({ default: '', index: true, trim: true })
+  assignedInvestigatorId: string; // Firebase UID or Mongo User ID of investigator (empty when NEW)
 
-  @Prop({ required: true, trim: true })
+  @Prop({ default: '', trim: true })
   assignedInvestigatorName: string;
 
   @Prop({ default: '', trim: true })

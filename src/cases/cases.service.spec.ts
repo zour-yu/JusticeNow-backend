@@ -55,7 +55,7 @@ describe('CasesService', () => {
     description: 'Protester was unlawfully detained and assaulted.',
     category: ComplaintCategory.POLICE_MISCONDUCT,
     priority: CasePriority.HIGH,
-    status: CaseStatus.ASSIGNED,
+    status: CaseStatus.PENDING,
     assignedInvestigatorId: assignedUid,
     assignedInvestigatorName: 'Sarah Connor',
     assignedInvestigatorEmail: 'sarah.connor@justicenow.org',

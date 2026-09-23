@@ -77,7 +77,7 @@ export class CasesService {
       description: dto.description,
       category: dto.category,
       priority: dto.priority || CasePriority.MEDIUM,
-      status: CaseStatus.ASSIGNED,
+      status: dto.assignedInvestigatorId ? CaseStatus.PENDING : CaseStatus.NEW,
       assignedInvestigatorId: dto.assignedInvestigatorId,
       assignedInvestigatorName: dto.assignedInvestigatorName,
       assignedInvestigatorEmail: dto.assignedInvestigatorEmail || '',
@@ -98,9 +98,11 @@ export class CasesService {
         : [],
       statusTimeline: [
         {
-          status: CaseStatus.ASSIGNED,
-          title: 'Case Assigned to Investigator',
-          note: `Case assigned to ${dto.assignedInvestigatorName} by ${creatorName}.`,
+          status: dto.assignedInvestigatorId ? CaseStatus.PENDING : CaseStatus.NEW,
+          title: dto.assignedInvestigatorId ? 'Case Created and Investigator Assigned' : 'New Case Created',
+          note: dto.assignedInvestigatorId
+            ? `Case assigned to ${dto.assignedInvestigatorName} by ${creatorName}.`
+            : `Case created and awaiting investigator assignment by ${creatorName}.`,
           updatedBy: creatorName,
           timestamp: new Date(),
         },
@@ -120,10 +122,8 @@ export class CasesService {
         $match: {
           status: {
             $in: [
-              CaseStatus.ASSIGNED,
+              CaseStatus.PENDING,
               CaseStatus.UNDER_INVESTIGATION,
-              CaseStatus.EVIDENCE_COLLECTION,
-              CaseStatus.REPORT_SUBMITTED,
             ],
           },
         },
@@ -185,7 +185,7 @@ export class CasesService {
     caseDoc.assignedAt = new Date();
 
     if (caseDoc.status === CaseStatus.RESOLVED || caseDoc.status === CaseStatus.CLOSED) {
-      caseDoc.status = CaseStatus.ASSIGNED;
+      caseDoc.status = CaseStatus.PENDING;
     }
 
     const assignmentNote = dto.note
@@ -242,7 +242,7 @@ export class CasesService {
       description: complaint.description,
       category: complaint.category,
       priority: dto.priority || (complaint.priority as any) || CasePriority.MEDIUM,
-      status: CaseStatus.ASSIGNED,
+      status: CaseStatus.PENDING,
       assignedInvestigatorId: dto.investigatorId,
       assignedInvestigatorName: dto.investigatorName,
       assignedInvestigatorEmail: dto.investigatorEmail || '',
@@ -273,7 +273,7 @@ export class CasesService {
         : [],
       statusTimeline: [
         {
-          status: CaseStatus.ASSIGNED,
+          status: CaseStatus.PENDING,
           title: 'Case Created and Investigator Assigned',
           note: `Case created from approved complaint ${complaint.trackingNumber} and assigned to ${dto.investigatorName} by ${adminName}.${dto.note ? ` Notes: ${dto.note}` : ''}`,
           updatedBy: adminName,
@@ -328,7 +328,7 @@ export class CasesService {
     const cases = await this.caseModel.find(filter).sort({ updatedAt: -1 }).exec();
 
     // Also include approved complaints awaiting assignment
-    if (!status || status === CaseStatus.ASSIGNED) {
+    if (!status || status === CaseStatus.NEW) {
       const approvedComplaints = await this.complaintModel
         .find({
           status: ComplaintStatus.APPROVED,
@@ -349,7 +349,7 @@ export class CasesService {
           description: comp.description,
           category: comp.category,
           priority: comp.priority || CasePriority.MEDIUM,
-          status: CaseStatus.ASSIGNED,
+          status: CaseStatus.NEW,
           assignedInvestigatorId: '',
           assignedInvestigatorName: '',
           assignedInvestigatorEmail: '',
@@ -416,10 +416,9 @@ export class CasesService {
     }
 
     const statusTitleMap: Record<CaseStatus, string> = {
-      [CaseStatus.ASSIGNED]: 'Case Assigned',
+      [CaseStatus.NEW]: 'New Case Created',
+      [CaseStatus.PENDING]: 'Investigator Assigned — Pending Start',
       [CaseStatus.UNDER_INVESTIGATION]: 'Investigation Commenced',
-      [CaseStatus.EVIDENCE_COLLECTION]: 'Evidence Collection Phase',
-      [CaseStatus.REPORT_SUBMITTED]: 'Investigation Report Submitted',
       [CaseStatus.RESOLVED]: 'Case Resolved',
       [CaseStatus.CLOSED]: 'Case Closed',
     };
@@ -520,22 +519,20 @@ export class CasesService {
       : {};
 
     const total = await this.caseModel.countDocuments(baseFilter).exec();
-    const assigned = await this.caseModel.countDocuments({ ...baseFilter, status: CaseStatus.ASSIGNED }).exec();
+    const newCases = await this.caseModel.countDocuments({ ...baseFilter, status: CaseStatus.NEW }).exec();
+    const pending = await this.caseModel.countDocuments({ ...baseFilter, status: CaseStatus.PENDING }).exec();
     const underInvestigation = await this.caseModel.countDocuments({ ...baseFilter, status: CaseStatus.UNDER_INVESTIGATION }).exec();
-    const evidenceCollection = await this.caseModel.countDocuments({ ...baseFilter, status: CaseStatus.EVIDENCE_COLLECTION }).exec();
-    const reportSubmitted = await this.caseModel.countDocuments({ ...baseFilter, status: CaseStatus.REPORT_SUBMITTED }).exec();
     const resolved = await this.caseModel.countDocuments({ ...baseFilter, status: CaseStatus.RESOLVED }).exec();
     const closed = await this.caseModel.countDocuments({ ...baseFilter, status: CaseStatus.CLOSED }).exec();
 
     return {
       total,
-      assigned,
+      newCases,
+      pending,
       underInvestigation,
-      evidenceCollection,
-      reportSubmitted,
       resolved,
       closed,
-      active: assigned + underInvestigation + evidenceCollection + reportSubmitted,
+      active: newCases + pending + underInvestigation,
     };
   }
 }

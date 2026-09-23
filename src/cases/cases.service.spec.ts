@@ -7,6 +7,7 @@ import { Complaint, ComplaintStatus } from '../complaints/schemas/complaint.sche
 import { User, UserRole, UserStatus } from '../users/schemas/user.schema';
 import { ComplaintCategory } from '../complaints/schemas/complaint.schema';
 import { UsersService } from '../users/users.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 describe('CasesService', () => {
   let service: CasesService;
@@ -86,7 +87,7 @@ describe('CasesService', () => {
     trackingNumber: 'JN-2026-999999',
     title: 'Unlawful Eviction',
     description: 'Tenant forcibly evicted without court order.',
-    category: ComplaintCategory.HOUSING_RIGHTS || ComplaintCategory.OTHER,
+    category: ComplaintCategory.OTHER,
     priority: CasePriority.HIGH,
     status: ComplaintStatus.APPROVED,
     citizenName: 'Citizen Mark',
@@ -97,6 +98,8 @@ describe('CasesService', () => {
     incidentLocation: { city: 'Kandy', address: 'Lake Road' },
     evidence: [],
     statusTimeline: [],
+    assignedInvestigatorId: undefined as string | undefined,
+    caseId: undefined as string | undefined,
     save: jest.fn().mockImplementation(function () {
       return Promise.resolve(this);
     }),
@@ -142,9 +145,18 @@ describe('CasesService', () => {
           provide: UsersService,
           useValue: mockUsersService,
         },
+        {
+          provide: NotificationsService,
+          useValue: {
+            create: jest.fn().mockResolvedValue({}),
+            getNotificationsForUser: jest.fn().mockResolvedValue([]),
+            getUnreadCount: jest.fn().mockResolvedValue(0),
+            markAsRead: jest.fn().mockResolvedValue({}),
+            markAllAsRead: jest.fn().mockResolvedValue({ modifiedCount: 0 }),
+          },
+        },
       ],
     }).compile();
-
     service = module.get<CasesService>(CasesService);
   });
 

@@ -27,6 +27,8 @@ import {
 import { AssignInvestigatorDto } from './dto/assign-investigator.dto';
 import { User, UserRole } from '../users/schemas/user.schema';
 import { UsersService } from '../users/users.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '../notifications/schemas/notification.schema';
 
 @Injectable()
 export class CasesService {
@@ -36,6 +38,7 @@ export class CasesService {
     @InjectModel(Complaint.name)
     private readonly complaintModel: Model<ComplaintDocument>,
     private readonly usersService: UsersService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   private generateCaseNumber(): string {
@@ -203,7 +206,42 @@ export class CasesService {
       timestamp: new Date(),
     });
 
-    return await caseDoc.save();
+    const savedCase = await caseDoc.save();
+
+    // Notify Investigator
+    if (dto.investigatorId) {
+      this.notificationsService.create({
+        userId: dto.investigatorId,
+        caseId: savedCase.caseNumber,
+        type: NotificationType.INVESTIGATOR_ASSIGNED,
+        title: 'New case assigned',
+        message: 'A new case has been assigned to you.',
+      }).catch(err => console.error('Failed to create notification', err));
+    }
+
+    // Notify Citizen
+    try {
+      let complaint: ComplaintDocument | null = null;
+      if (savedCase.complaintId.startsWith('JN-')) {
+        complaint = await this.complaintModel.findOne?.({ trackingNumber: savedCase.complaintId })?.exec?.() ?? null;
+      } else {
+        complaint = await this.complaintModel.findById?.(savedCase.complaintId)?.exec?.() ?? null;
+      }
+      
+      if (complaint && complaint.citizenId) {
+        this.notificationsService.create({
+          userId: complaint.citizenId,
+          caseId: savedCase.caseNumber,
+          type: NotificationType.INVESTIGATOR_ASSIGNED,
+          title: 'Investigator assigned',
+          message: 'An investigator has been assigned to your case.',
+        }).catch(err => console.error('Failed to create notification', err));
+      }
+    } catch (error) {
+      console.error('Could not fetch complaint to notify citizen', error);
+    }
+
+    return savedCase;
   }
 
   async assignInvestigatorToComplaint(
@@ -431,7 +469,43 @@ export class CasesService {
       timestamp: new Date(),
     });
 
-    return await caseDoc.save();
+    const savedCase = await caseDoc.save();
+
+    // Notify users about status change
+    try {
+      // Notify Investigator
+      if (savedCase.assignedInvestigatorId) {
+        this.notificationsService.create({
+          userId: savedCase.assignedInvestigatorId,
+          caseId: savedCase.caseNumber,
+          type: NotificationType.CASE_STATUS_CHANGED,
+          title: 'Case Status Changed',
+          message: `Case #${savedCase.caseNumber} status changed to ${dto.status.replace(/_/g, ' ')}.`,
+        }).catch(err => console.error('Failed to create notification', err));
+      }
+
+      // Notify Citizen
+      let complaint: ComplaintDocument | null = null;
+      if (savedCase.complaintId.startsWith('JN-')) {
+        complaint = await this.complaintModel.findOne?.({ trackingNumber: savedCase.complaintId })?.exec?.() ?? null;
+      } else {
+        complaint = await this.complaintModel.findById?.(savedCase.complaintId)?.exec?.() ?? null;
+      }
+      
+      if (complaint && complaint.citizenId) {
+        this.notificationsService.create({
+          userId: complaint.citizenId,
+          caseId: savedCase.caseNumber,
+          type: NotificationType.CASE_STATUS_CHANGED,
+          title: 'Case Status Changed',
+          message: `Your case status has changed to ${dto.status.replace(/_/g, ' ')}.`,
+        }).catch(err => console.error('Failed to create notification', err));
+      }
+    } catch (error) {
+      console.error('Could not fetch complaint to notify citizen', error);
+    }
+
+    return savedCase;
   }
 
   async addEvidence(

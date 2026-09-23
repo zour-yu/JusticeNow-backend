@@ -223,9 +223,9 @@ export class CasesService {
     try {
       let complaint: ComplaintDocument | null = null;
       if (savedCase.complaintId.startsWith('JN-')) {
-        complaint = await this.complaintModel.findOne({ trackingNumber: savedCase.complaintId }).exec();
+        complaint = await this.complaintModel.findOne?.({ trackingNumber: savedCase.complaintId })?.exec?.() ?? null;
       } else {
-        complaint = await this.complaintModel.findById(savedCase.complaintId).exec();
+        complaint = await this.complaintModel.findById?.(savedCase.complaintId)?.exec?.() ?? null;
       }
       
       if (complaint && complaint.citizenId) {
@@ -487,9 +487,9 @@ export class CasesService {
       // Notify Citizen
       let complaint: ComplaintDocument | null = null;
       if (savedCase.complaintId.startsWith('JN-')) {
-        complaint = await this.complaintModel.findOne({ trackingNumber: savedCase.complaintId }).exec();
+        complaint = await this.complaintModel.findOne?.({ trackingNumber: savedCase.complaintId })?.exec?.() ?? null;
       } else {
-        complaint = await this.complaintModel.findById(savedCase.complaintId).exec();
+        complaint = await this.complaintModel.findById?.(savedCase.complaintId)?.exec?.() ?? null;
       }
       
       if (complaint && complaint.citizenId) {

@@ -5,6 +5,7 @@ import { ComplaintsController } from './complaints.controller';
 import { ComplaintsService } from './complaints.service';
 import { FirebaseModule } from '../config/firebase.module';
 import { UsersModule } from '../users/users.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { UsersModule } from '../users/users.module';
     ]),
     FirebaseModule,
     UsersModule,
+    NotificationsModule,
   ],
   controllers: [ComplaintsController],
   providers: [ComplaintsService],

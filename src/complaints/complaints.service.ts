@@ -20,12 +20,15 @@ import {
   ReviewComplaintDto,
 } from './dto/review-complaint.dto';
 import { User, UserRole } from '../users/schemas/user.schema';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '../notifications/schemas/notification.schema';
 
 @Injectable()
 export class ComplaintsService {
   constructor(
     @InjectModel(Complaint.name)
     private readonly complaintModel: Model<ComplaintDocument>,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   private generateTrackingNumber(): string {
@@ -181,7 +184,24 @@ export class ComplaintsService {
       timestamp: complaint.adminReviewedAt,
     });
 
-    return await complaint.save();
+    const saved = await complaint.save();
+
+    if (saved.citizenId && saved.citizenId !== 'anonymous') {
+      const isApproved = dto.decision === ComplaintReviewDecision.APPROVED;
+      this.notificationsService
+        .create({
+          userId: saved.citizenId,
+          caseId: saved.trackingNumber,
+          type: NotificationType.COMPLAINT_STATUS_CHANGED,
+          title: isApproved ? 'Complaint Approved' : 'Complaint Reviewed',
+          message: isApproved
+            ? `Your complaint #${saved.trackingNumber} has been approved by the administration.`
+            : `Your complaint #${saved.trackingNumber} has been reviewed: ${dto.note || 'Rejected by administration.'}`,
+        })
+        .catch((err) => console.error('Failed to notify citizen on complaint review', err));
+    }
+
+    return saved;
   }
 
   async updateStatus(

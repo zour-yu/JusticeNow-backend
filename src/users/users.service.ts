@@ -102,6 +102,22 @@ export class UsersService {
     return await user.save();
   }
 
+  async findByIdentifier(identifier: string): Promise<UserDocument | null> {
+    if (!identifier) return null;
+    let user = await this.userModel.findOne({ firebaseUid: identifier }).exec();
+    if (!user) {
+      try {
+        user = await this.userModel.findById(identifier).exec();
+      } catch {
+        // Not a Mongo ObjectId
+      }
+    }
+    if (!user) {
+      user = await this.userModel.findOne({ email: identifier.toLowerCase() }).exec();
+    }
+    return user;
+  }
+
   async deleteByFirebaseUid(firebaseUid: string): Promise<void> {
     await this.userModel.findOneAndDelete({ firebaseUid }).exec();
   }

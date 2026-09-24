@@ -16,20 +16,30 @@ export class NotificationsService {
     return newNotification.save();
   }
 
-  async getNotificationsForUser(userId: string): Promise<Notification[]> {
+  private buildUserFilter(userId: string | string[]): any {
+    if (Array.isArray(userId)) {
+      const valid = userId.filter(Boolean);
+      return valid.length === 1 ? valid[0] : { $in: valid };
+    }
+    return userId;
+  }
+
+  async getNotificationsForUser(userId: string | string[]): Promise<Notification[]> {
     return this.notificationModel
-      .find({ userId })
+      .find({ userId: this.buildUserFilter(userId) })
       .sort({ createdAt: -1 })
       .exec();
   }
 
-  async getUnreadCount(userId: string): Promise<number> {
-    return this.notificationModel.countDocuments({ userId, isRead: false }).exec();
+  async getUnreadCount(userId: string | string[]): Promise<number> {
+    return this.notificationModel
+      .countDocuments({ userId: this.buildUserFilter(userId), isRead: false })
+      .exec();
   }
 
-  async markAsRead(id: string, userId: string): Promise<Notification> {
+  async markAsRead(id: string, userId: string | string[]): Promise<Notification> {
     const notification = await this.notificationModel.findOneAndUpdate(
-      { _id: id, userId },
+      { _id: id, userId: this.buildUserFilter(userId) },
       { isRead: true },
       { new: true },
     ).exec();
@@ -40,9 +50,9 @@ export class NotificationsService {
     return notification;
   }
 
-  async markAllAsRead(userId: string): Promise<{ modifiedCount: number }> {
+  async markAllAsRead(userId: string | string[]): Promise<{ modifiedCount: number }> {
     const result = await this.notificationModel.updateMany(
-      { userId, isRead: false },
+      { userId: this.buildUserFilter(userId), isRead: false },
       { $set: { isRead: true } },
     ).exec();
     

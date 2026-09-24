@@ -55,6 +55,70 @@ export class CasesService {
     return `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Officer';
   }
 
+  private async notifyInvestigator(
+    investigatorIdentifier: string,
+    caseNumber: string,
+    title: string,
+    message: string,
+  ): Promise<void> {
+    if (!investigatorIdentifier) return;
+    let userId = investigatorIdentifier;
+    try {
+      const user = await this.usersService.findByIdentifier(investigatorIdentifier);
+      if (user?.firebaseUid) {
+        userId = user.firebaseUid;
+      }
+    } catch {
+      // fallback to identifier
+    }
+
+    this.notificationsService
+      .create({
+        userId,
+        caseId: caseNumber,
+        type: NotificationType.INVESTIGATOR_ASSIGNED,
+        title,
+        message,
+      })
+      .catch((err) => console.error('Failed to notify investigator', err));
+  }
+
+  private async notifyCitizen(
+    complaintIdOrNumber: string,
+    caseNumber: string,
+    type: NotificationType,
+    title: string,
+    message: string,
+  ): Promise<void> {
+    if (!complaintIdOrNumber) return;
+    try {
+      let complaint: ComplaintDocument | null = null;
+      if (complaintIdOrNumber.startsWith('JN-')) {
+        complaint = (await this.complaintModel.findOne?.({ trackingNumber: complaintIdOrNumber })?.exec?.()) ?? null;
+      } else {
+        try {
+          complaint = (await this.complaintModel.findById?.(complaintIdOrNumber)?.exec?.()) ?? null;
+        } catch {
+          complaint = (await this.complaintModel.findOne?.({ trackingNumber: complaintIdOrNumber })?.exec?.()) ?? null;
+        }
+      }
+
+      if (complaint && complaint.citizenId && complaint.citizenId !== 'anonymous') {
+        this.notificationsService
+          .create({
+            userId: complaint.citizenId,
+            caseId: caseNumber,
+            type,
+            title,
+            message,
+          })
+          .catch((err) => console.error('Failed to notify citizen', err));
+      }
+    } catch (err) {
+      console.error('Could not fetch complaint to notify citizen', err);
+    }
+  }
+
   private verifyCaseModificationPermission(caseDoc: CaseDocument, user: User): void {
     const userIdentifier = this.getUserIdentifier(user);
     const isAssigned =
@@ -113,7 +177,30 @@ export class CasesService {
       findings: '',
     });
 
-    return await newCase.save();
+    const savedCase = await newCase.save();
+
+    if (dto.assignedInvestigatorId) {
+      this.notifyInvestigator(
+        dto.assignedInvestigatorId,
+        savedCase.caseNumber,
+        'New Case Assigned',
+        `Case #${savedCase.caseNumber} (${savedCase.title}) has been assigned to you.`,
+      );
+    }
+
+    if (dto.complaintId) {
+      this.notifyCitizen(
+        dto.complaintId,
+        savedCase.caseNumber,
+        NotificationType.INVESTIGATOR_ASSIGNED,
+        'Investigator Assigned',
+        dto.assignedInvestigatorName
+          ? `Investigator ${dto.assignedInvestigatorName} has been assigned to your case #${savedCase.caseNumber}.`
+          : `A new case #${savedCase.caseNumber} has been initiated for your complaint.`,
+      );
+    }
+
+    return savedCase;
   }
 
   async getAvailableInvestigators(): Promise<any[]> {
@@ -170,7 +257,26 @@ export class CasesService {
     dto: AssignInvestigatorDto,
     adminUser: User,
   ): Promise<Case> {
-    const caseDoc = await this.findById(idOrCaseNumber, adminUser);
+    if (idOrCaseNumber.startsWith('JN-')) {
+      return this.assignInvestigatorToComplaint(idOrCaseNumber, dto, adminUser);
+    }
+
+    let caseDoc: CaseDocument | null = null;
+    try {
+      caseDoc = await this.findById(idOrCaseNumber, adminUser);
+    } catch (err) {
+      let complaint: ComplaintDocument | null = null;
+      try {
+        complaint = await this.complaintModel.findById(idOrCaseNumber).exec();
+      } catch {
+        // Not a Mongo ID
+      }
+      if (complaint) {
+        return this.assignInvestigatorToComplaint(idOrCaseNumber, dto, adminUser);
+      }
+      throw err;
+    }
+
     const adminName = this.getUserFullName(adminUser);
 
     const previousInvestigator = caseDoc.assignedInvestigatorName;
@@ -210,35 +316,23 @@ export class CasesService {
 
     // Notify Investigator
     if (dto.investigatorId) {
-      this.notificationsService.create({
-        userId: dto.investigatorId,
-        caseId: savedCase.caseNumber,
-        type: NotificationType.INVESTIGATOR_ASSIGNED,
-        title: 'New case assigned',
-        message: 'A new case has been assigned to you.',
-      }).catch(err => console.error('Failed to create notification', err));
+      this.notifyInvestigator(
+        dto.investigatorId,
+        savedCase.caseNumber,
+        'New Case Assigned',
+        `Case #${savedCase.caseNumber} (${savedCase.title}) has been assigned to you.`,
+      );
     }
 
     // Notify Citizen
-    try {
-      let complaint: ComplaintDocument | null = null;
-      if (savedCase.complaintId.startsWith('JN-')) {
-        complaint = await this.complaintModel.findOne?.({ trackingNumber: savedCase.complaintId })?.exec?.() ?? null;
-      } else {
-        complaint = await this.complaintModel.findById?.(savedCase.complaintId)?.exec?.() ?? null;
-      }
-      
-      if (complaint && complaint.citizenId) {
-        this.notificationsService.create({
-          userId: complaint.citizenId,
-          caseId: savedCase.caseNumber,
-          type: NotificationType.INVESTIGATOR_ASSIGNED,
-          title: 'Investigator assigned',
-          message: 'An investigator has been assigned to your case.',
-        }).catch(err => console.error('Failed to create notification', err));
-      }
-    } catch (error) {
-      console.error('Could not fetch complaint to notify citizen', error);
+    if (savedCase.complaintId) {
+      this.notifyCitizen(
+        savedCase.complaintId,
+        savedCase.caseNumber,
+        NotificationType.INVESTIGATOR_ASSIGNED,
+        'Investigator Assigned',
+        `Investigator ${dto.investigatorName} has been assigned to your case #${savedCase.caseNumber}.`,
+      );
     }
 
     return savedCase;
@@ -336,6 +430,30 @@ export class CasesService {
     });
 
     await complaint.save();
+
+    // Notify Investigator
+    if (dto.investigatorId) {
+      this.notifyInvestigator(
+        dto.investigatorId,
+        savedCase.caseNumber,
+        'New Case Assigned',
+        `Case #${savedCase.caseNumber} (${savedCase.title}) has been assigned to you.`,
+      );
+    }
+
+    // Notify Citizen
+    if (complaint.citizenId && complaint.citizenId !== 'anonymous') {
+      this.notificationsService
+        .create({
+          userId: complaint.citizenId,
+          caseId: savedCase.caseNumber,
+          type: NotificationType.INVESTIGATOR_ASSIGNED,
+          title: 'Investigator Assigned',
+          message: `Your complaint #${complaint.trackingNumber} has been assigned to Investigator ${dto.investigatorName} (Case Ref: #${savedCase.caseNumber}).`,
+        })
+        .catch((err) => console.error('Failed to notify citizen on assignment', err));
+    }
+
     return savedCase;
   }
 
@@ -471,38 +589,25 @@ export class CasesService {
 
     const savedCase = await caseDoc.save();
 
-    // Notify users about status change
-    try {
-      // Notify Investigator
-      if (savedCase.assignedInvestigatorId) {
-        this.notificationsService.create({
-          userId: savedCase.assignedInvestigatorId,
-          caseId: savedCase.caseNumber,
-          type: NotificationType.CASE_STATUS_CHANGED,
-          title: 'Case Status Changed',
-          message: `Case #${savedCase.caseNumber} status changed to ${dto.status.replace(/_/g, ' ')}.`,
-        }).catch(err => console.error('Failed to create notification', err));
-      }
+    // Notify Investigator
+    if (savedCase.assignedInvestigatorId) {
+      this.notifyInvestigator(
+        savedCase.assignedInvestigatorId,
+        savedCase.caseNumber,
+        'Case Status Changed',
+        `Case #${savedCase.caseNumber} status changed to ${dto.status.replace(/_/g, ' ')}.`,
+      );
+    }
 
-      // Notify Citizen
-      let complaint: ComplaintDocument | null = null;
-      if (savedCase.complaintId.startsWith('JN-')) {
-        complaint = await this.complaintModel.findOne?.({ trackingNumber: savedCase.complaintId })?.exec?.() ?? null;
-      } else {
-        complaint = await this.complaintModel.findById?.(savedCase.complaintId)?.exec?.() ?? null;
-      }
-      
-      if (complaint && complaint.citizenId) {
-        this.notificationsService.create({
-          userId: complaint.citizenId,
-          caseId: savedCase.caseNumber,
-          type: NotificationType.CASE_STATUS_CHANGED,
-          title: 'Case Status Changed',
-          message: `Your case status has changed to ${dto.status.replace(/_/g, ' ')}.`,
-        }).catch(err => console.error('Failed to create notification', err));
-      }
-    } catch (error) {
-      console.error('Could not fetch complaint to notify citizen', error);
+    // Notify Citizen
+    if (savedCase.complaintId) {
+      this.notifyCitizen(
+        savedCase.complaintId,
+        savedCase.caseNumber,
+        NotificationType.CASE_STATUS_CHANGED,
+        'Case Status Changed',
+        `Your case #${savedCase.caseNumber} status has changed to ${dto.status.replace(/_/g, ' ')}.`,
+      );
     }
 
     return savedCase;

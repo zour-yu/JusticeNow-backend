@@ -14,6 +14,7 @@ describe('CasesService', () => {
   let mockCaseModel: any;
   let mockComplaintModel: any;
   let mockUsersService: any;
+  let mockNotificationsService: any;
 
   const mockInvestigator1: User = {
     firebaseUid: 'inv-uid-1',
@@ -93,6 +94,7 @@ describe('CasesService', () => {
     citizenName: 'Citizen Mark',
     citizenEmail: 'mark@example.com',
     citizenPhone: '+12345',
+    citizenId: 'citizen-uid-1',
     isAnonymous: false,
     incidentDate: new Date(),
     incidentLocation: { city: 'Kandy', address: 'Lake Road' },
@@ -128,6 +130,19 @@ describe('CasesService', () => {
     mockUsersService = {
       findInvestigators: jest.fn().mockResolvedValue([mockInvestigator1, mockInvestigator2]),
       findByFirebaseUid: jest.fn(),
+      findByIdentifier: jest.fn().mockImplementation(async (id: string) => {
+        if (id === mockInvestigator1.firebaseUid) return mockInvestigator1;
+        if (id === mockInvestigator2.firebaseUid) return mockInvestigator2;
+        return null;
+      }),
+    };
+
+    mockNotificationsService = {
+      create: jest.fn().mockResolvedValue({}),
+      getNotificationsForUser: jest.fn().mockResolvedValue([]),
+      getUnreadCount: jest.fn().mockResolvedValue(0),
+      markAsRead: jest.fn().mockResolvedValue({}),
+      markAllAsRead: jest.fn().mockResolvedValue({ modifiedCount: 0 }),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -147,13 +162,7 @@ describe('CasesService', () => {
         },
         {
           provide: NotificationsService,
-          useValue: {
-            create: jest.fn().mockResolvedValue({}),
-            getNotificationsForUser: jest.fn().mockResolvedValue([]),
-            getUnreadCount: jest.fn().mockResolvedValue(0),
-            markAsRead: jest.fn().mockResolvedValue({}),
-            markAllAsRead: jest.fn().mockResolvedValue({ modifiedCount: 0 }),
-          },
+          useValue: mockNotificationsService,
         },
       ],
     }).compile();
@@ -233,6 +242,18 @@ describe('CasesService', () => {
       expect(mockComplaint.status).toBe(ComplaintStatus.CONVERTED_TO_CASE);
       expect(mockComplaint.assignedInvestigatorId).toBe('inv-uid-1');
       expect(mockComplaint.save).toHaveBeenCalled();
+      expect(mockNotificationsService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'inv-uid-1',
+          type: 'INVESTIGATOR_ASSIGNED',
+        }),
+      );
+      expect(mockNotificationsService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'citizen-uid-1',
+          type: 'INVESTIGATOR_ASSIGNED',
+        }),
+      );
     });
   });
 

@@ -12,6 +12,8 @@ import { FirebaseAuthGuard } from '../common/guards/firebase-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { UserRole, UserStatus } from './schemas/user.schema';
+import { FirebaseUser } from '../common/decorators/current-user.decorator';
+import * as AdminAuth from 'firebase-admin/auth';
 
 @Controller('users')
 @UseGuards(FirebaseAuthGuard, RolesGuard)
@@ -77,6 +79,20 @@ export class UsersController {
       success: true,
       statusCode: HttpStatus.OK,
       message: `User status updated to ${status} successfully`,
+      data: updatedUser,
+    };
+  }
+
+  @Patch('push-token')
+  async updatePushToken(
+    @FirebaseUser() firebaseUser: AdminAuth.DecodedIdToken,
+    @Body('pushToken') pushToken: string,
+  ) {
+    const updatedUser = await this.usersService.updateByFirebaseUid(firebaseUser.uid, { pushToken });
+    return {
+      success: true,
+      statusCode: HttpStatus.OK,
+      message: 'Push token updated successfully',
       data: updatedUser,
     };
   }

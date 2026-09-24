@@ -6,6 +6,7 @@ export type NotificationDocument = Notification & Document;
 export enum NotificationType {
   INVESTIGATOR_ASSIGNED = 'INVESTIGATOR_ASSIGNED',
   CASE_STATUS_CHANGED = 'CASE_STATUS_CHANGED',
+  COMPLAINT_STATUS_CHANGED = 'COMPLAINT_STATUS_CHANGED',
 }
 
 @Schema({ timestamps: true })

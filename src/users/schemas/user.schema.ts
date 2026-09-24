@@ -41,6 +41,9 @@ export class User {
 
   @Prop({ default: false })
   isProfileComplete: boolean;
+
+  @Prop({ trim: true })
+  pushToken?: string;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

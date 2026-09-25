@@ -6,4 +6,5 @@ export class CreateNotificationDto {
   type: NotificationType;
   title: string;
   message: string;
+  metadata?: Record<string, any>;
 }

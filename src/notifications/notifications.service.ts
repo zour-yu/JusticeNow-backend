@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import axios from 'axios';
+
 import { Notification, NotificationDocument } from './schemas/notification.schema';
 import { CreateNotificationDto } from './dto/create-notification.dto';
 import { UsersService } from '../users/users.service';
@@ -20,32 +20,8 @@ export class NotificationsService {
     const newNotification = new this.notificationModel(createNotificationDto);
     const savedNotification = await newNotification.save();
 
-    this.sendPushNotification(createNotificationDto).catch(err => {
-      this.logger.error('Failed to send push notification', err);
-    });
-
     return savedNotification;
   }
-
-  private async sendPushNotification(dto: CreateNotificationDto) {
-    const user = await this.usersService.findByIdentifier(dto.userId);
-    if (!user || !user.pushToken) {
-      return;
-    }
-
-    try {
-      await axios.post('https://exp.host/--/api/v2/push/send', {
-        to: user.pushToken,
-        title: dto.title,
-        body: dto.message,
-        data: dto.metadata,
-      });
-      this.logger.log(`Push notification sent to ${user.pushToken}`);
-    } catch (error) {
-      this.logger.error('Error sending push notification to Expo', error);
-    }
-  }
-
   private buildUserFilter(userId: string | string[]): any {
     if (Array.isArray(userId)) {
       const valid = userId.filter(Boolean);

@@ -9,6 +9,7 @@ import { AuthModule } from './auth/auth.module';
 import { ComplaintsModule } from './complaints/complaints.module';
 import { CasesModule } from './cases/cases.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { StorageModule } from './storage/storage.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { NotificationsModule } from './notifications/notifications.module';
     ComplaintsModule,
     CasesModule,
     NotificationsModule,
+    StorageModule,
   ],
   controllers: [AppController],
   providers: [AppService],

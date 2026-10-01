@@ -122,6 +122,18 @@ export class CasesController {
     };
   }
 
+  @Get('metrics/categories')
+  @Roles(UserRole.ADMIN)
+  async getCategoryMetrics(@CurrentUser() user: User) {
+    const metrics = await this.casesService.getCategoryMetrics(user);
+    return {
+      success: true,
+      statusCode: HttpStatus.OK,
+      message: 'Case category metrics retrieved successfully',
+      data: metrics,
+    };
+  }
+
   @Get('all')
   @Roles(UserRole.ADMIN)
   async getAllCases(

@@ -714,4 +714,72 @@ export class CasesService {
       active: newCases + pending + underInvestigation,
     };
   }
+
+  async getCategoryMetrics(user: User): Promise<any[]> {
+    const userIdentifier = this.getUserIdentifier(user);
+    const isInvestigator = user.role === UserRole.INVESTIGATOR;
+
+    const baseFilter = isInvestigator
+      ? {
+          $or: [
+            { assignedInvestigatorId: userIdentifier },
+            { assignedInvestigatorEmail: user.email?.toLowerCase() },
+          ],
+        }
+      : {};
+
+    const categoryGroupings = await this.caseModel.aggregate([
+      { $match: baseFilter },
+      {
+        $group: {
+          _id: '$category',
+          total: { $sum: 1 },
+          active: {
+            $sum: {
+              $cond: [
+                { $in: ['$status', [CaseStatus.NEW, CaseStatus.PENDING, CaseStatus.UNDER_INVESTIGATION]] },
+                1,
+                0,
+              ],
+            },
+          },
+          resolved: {
+            $sum: {
+              $cond: [
+                { $in: ['$status', [CaseStatus.RESOLVED, CaseStatus.CLOSED]] },
+                1,
+                0,
+              ],
+            },
+          },
+          cases: {
+            $push: {
+              _id: '$_id',
+              caseNumber: '$caseNumber',
+              status: '$status',
+              title: '$title',
+              createdAt: '$createdAt',
+              complaintDetails: {
+                citizenName: '$complaintDetails.citizenName',
+                incidentLocation: '$complaintDetails.incidentLocation',
+              }
+            }
+          }
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          category: '$_id',
+          total: 1,
+          active: 1,
+          resolved: 1,
+          cases: 1,
+        }
+      },
+      { $sort: { total: -1 } }
+    ]);
+
+    return categoryGroupings;
+  }
 }

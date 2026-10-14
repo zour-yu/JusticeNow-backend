@@ -4,6 +4,7 @@ import {
   Patch,
   Param,
   Body,
+  Query,
   UseGuards,
   HttpStatus,
 } from '@nestjs/common';
@@ -13,6 +14,7 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { UserRole, UserStatus } from './schemas/user.schema';
 import { FirebaseUser } from '../common/decorators/current-user.decorator';
+import { UpdateUserDto } from './dto/update-user.dto';
 import * as AdminAuth from 'firebase-admin/auth';
 
 @Controller('users')
@@ -44,6 +46,34 @@ export class UsersController {
     };
   }
 
+  @Get()
+  @Roles(UserRole.ADMIN)
+  async getAllUsers(
+    @Query('role') role?: UserRole,
+    @Query('status') status?: UserStatus,
+    @Query('search') search?: string,
+  ) {
+    const users = await this.usersService.findAllUsers({ role, status, search });
+    return {
+      success: true,
+      statusCode: HttpStatus.OK,
+      message: 'Users retrieved successfully',
+      data: users,
+    };
+  }
+
+  @Get(':id')
+  @Roles(UserRole.ADMIN)
+  async getUserById(@Param('id') id: string) {
+    const user = await this.usersService.findUserById(id);
+    return {
+      success: true,
+      statusCode: HttpStatus.OK,
+      message: 'User details retrieved successfully',
+      data: user,
+    };
+  }
+
   @Patch('investigators/:id/approve')
   @Roles(UserRole.ADMIN)
   async approveInvestigator(@Param('id') id: string) {
@@ -68,6 +98,44 @@ export class UsersController {
     };
   }
 
+  @Patch('push-token')
+  async updatePushToken(
+    @FirebaseUser() firebaseUser: AdminAuth.DecodedIdToken,
+    @Body('pushToken') pushToken: string,
+  ) {
+    const updatedUser = await this.usersService.updateByFirebaseUid(firebaseUser.uid, { pushToken });
+    return {
+      success: true,
+      statusCode: HttpStatus.OK,
+      message: 'Push token updated successfully',
+      data: updatedUser,
+    };
+  }
+
+  @Patch(':id/deactivate')
+  @Roles(UserRole.ADMIN)
+  async deactivateUser(@Param('id') id: string) {
+    const deactivatedUser = await this.usersService.deactivateUser(id);
+    return {
+      success: true,
+      statusCode: HttpStatus.OK,
+      message: 'User account deactivated successfully',
+      data: deactivatedUser,
+    };
+  }
+
+  @Patch(':id/reactivate')
+  @Roles(UserRole.ADMIN)
+  async reactivateUser(@Param('id') id: string) {
+    const reactivatedUser = await this.usersService.reactivateUser(id);
+    return {
+      success: true,
+      statusCode: HttpStatus.OK,
+      message: 'User account reactivated successfully',
+      data: reactivatedUser,
+    };
+  }
+
   @Patch(':id/status')
   @Roles(UserRole.ADMIN)
   async updateStatus(
@@ -83,17 +151,19 @@ export class UsersController {
     };
   }
 
-  @Patch('push-token')
-  async updatePushToken(
-    @FirebaseUser() firebaseUser: AdminAuth.DecodedIdToken,
-    @Body('pushToken') pushToken: string,
+  @Patch(':id')
+  @Roles(UserRole.ADMIN)
+  async updateUser(
+    @Param('id') id: string,
+    @Body() updateDto: UpdateUserDto,
   ) {
-    const updatedUser = await this.usersService.updateByFirebaseUid(firebaseUser.uid, { pushToken });
+    const updatedUser = await this.usersService.updateUserByAdmin(id, updateDto);
     return {
       success: true,
       statusCode: HttpStatus.OK,
-      message: 'Push token updated successfully',
+      message: 'User information updated successfully',
       data: updatedUser,
     };
   }
 }
+

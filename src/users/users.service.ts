@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { User, UserDocument, UserRole, UserStatus } from './schemas/user.schema';
+import { UpdateUserDto } from './dto/update-user.dto';
 
 @Injectable()
 export class UsersService {
@@ -69,6 +70,61 @@ export class UsersService {
       .exec();
   }
 
+  async findAllUsers(filters?: {
+    role?: UserRole;
+    status?: UserStatus;
+    search?: string;
+  }): Promise<UserDocument[]> {
+    const query: any = {};
+    if (filters?.role) {
+      query.role = filters.role;
+    }
+    if (filters?.status) {
+      query.status = filters.status;
+    }
+    if (filters?.search && filters.search.trim()) {
+      const term = filters.search.trim();
+      query.$or = [
+        { firstName: { $regex: term, $options: 'i' } },
+        { lastName: { $regex: term, $options: 'i' } },
+        { email: { $regex: term, $options: 'i' } },
+        { phone: { $regex: term, $options: 'i' } },
+      ];
+    }
+    return this.userModel.find(query).sort({ createdAt: -1 }).exec();
+  }
+
+  async findUserById(idOrUid: string): Promise<UserDocument> {
+    const user = await this.findByIdentifier(idOrUid);
+    if (!user) {
+      throw new NotFoundException(`User not found with identifier: ${idOrUid}`);
+    }
+    return user;
+  }
+
+  async updateUserByAdmin(
+    idOrUid: string,
+    updateData: UpdateUserDto,
+  ): Promise<UserDocument> {
+    const user = await this.findUserById(idOrUid);
+
+    if (updateData.firstName !== undefined) user.firstName = updateData.firstName.trim();
+    if (updateData.lastName !== undefined) user.lastName = updateData.lastName.trim();
+    if (updateData.phone !== undefined) user.phone = updateData.phone.trim();
+    if (updateData.role !== undefined) user.role = updateData.role;
+    if (updateData.status !== undefined) user.status = updateData.status;
+
+    return await user.save();
+  }
+
+  async deactivateUser(idOrUid: string): Promise<UserDocument> {
+    return this.updateUserStatus(idOrUid, UserStatus.INACTIVE);
+  }
+
+  async reactivateUser(idOrUid: string): Promise<UserDocument> {
+    return this.updateUserStatus(idOrUid, UserStatus.ACTIVE);
+  }
+
   async approveInvestigator(idOrUid: string): Promise<UserDocument> {
     return this.updateUserStatus(idOrUid, UserStatus.ACTIVE);
   }
@@ -122,3 +178,4 @@ export class UsersService {
     await this.userModel.findOneAndDelete({ firebaseUid }).exec();
   }
 }
+

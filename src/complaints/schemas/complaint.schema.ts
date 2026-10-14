@@ -145,6 +145,9 @@ export class Complaint {
   @Prop({ default: null })
   caseId?: string;
 
+  @Prop({ default: null })
+  caseStatus?: string;
+
   @Prop({ default: '' })
   adminReviewNotes?: string;
 

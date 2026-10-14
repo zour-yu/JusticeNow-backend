@@ -139,8 +139,9 @@ export class CasesController {
   async getAllCases(
     @CurrentUser() user: User,
     @Query('status') status?: CaseStatus,
+    @Query('category') category?: string,
   ) {
-    const cases = await this.casesService.findAll(user, status);
+    const cases = await this.casesService.findAll(user, status, category);
     return {
       success: true,
       statusCode: HttpStatus.OK,
@@ -149,8 +150,9 @@ export class CasesController {
     };
   }
 
+
   @Get(':id')
-  @Roles(UserRole.INVESTIGATOR, UserRole.ADMIN)
+  @Roles(UserRole.INVESTIGATOR, UserRole.ADMIN, UserRole.CITIZEN)
   async getCaseById(
     @Param('id') id: string,
     @CurrentUser() user: User,

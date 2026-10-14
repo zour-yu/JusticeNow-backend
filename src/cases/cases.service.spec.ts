@@ -49,6 +49,28 @@ describe('CasesService', () => {
     isProfileComplete: true,
   };
 
+  const mockCitizen: User = {
+    firebaseUid: 'citizen-uid-1',
+    firstName: 'Jane',
+    lastName: 'Doe',
+    email: 'jane@example.com',
+    phone: '+1987654321',
+    role: UserRole.CITIZEN,
+    status: UserStatus.ACTIVE,
+    isProfileComplete: true,
+  };
+
+  const mockOtherCitizen: User = {
+    firebaseUid: 'citizen-uid-2',
+    firstName: 'Other',
+    lastName: 'Citizen',
+    email: 'other@example.com',
+    phone: '+1999999999',
+    role: UserRole.CITIZEN,
+    status: UserStatus.ACTIVE,
+    isProfileComplete: true,
+  };
+
   const createMockCaseDoc = (assignedUid = 'inv-uid-1') => ({
     _id: 'case-mongo-id-1',
     caseNumber: 'CASE-2026-123456',
@@ -99,9 +121,10 @@ describe('CasesService', () => {
     incidentDate: new Date(),
     incidentLocation: { city: 'Kandy', address: 'Lake Road' },
     evidence: [],
-    statusTimeline: [],
+    statusTimeline: [] as any[],
     assignedInvestigatorId: undefined as string | undefined,
     caseId: undefined as string | undefined,
+    caseStatus: undefined as any,
     save: jest.fn().mockImplementation(function () {
       return Promise.resolve(this);
     }),
@@ -277,32 +300,42 @@ describe('CasesService', () => {
   });
 
   describe('findById', () => {
-    it('should retrieve a case by caseNumber or ID', async () => {
+    it('should allow the citizen owner of the complaint to view their case', async () => {
       const mockDoc = createMockCaseDoc('inv-uid-1');
       mockCaseModel.findOne.mockReturnValue({
         exec: jest.fn().mockResolvedValue(mockDoc),
       });
 
-      const result = await service.findById('CASE-2026-123456', mockInvestigator1);
-      expect(result).toBe(mockDoc);
+      const result = await service.findById('CASE-2026-123456', mockCitizen);
+      expect(result.caseNumber).toBe('CASE-2026-123456');
+      expect(result.investigationNotes).toEqual([]);
+      expect(result.assignedInvestigatorEmail).toBeUndefined();
     });
 
-    it('should throw NotFoundException if case does not exist', async () => {
+    it('should reject a citizen attempting to view a case that does not belong to them', async () => {
+      const mockDoc = createMockCaseDoc('inv-uid-1');
       mockCaseModel.findOne.mockReturnValue({
+        exec: jest.fn().mockResolvedValue(mockDoc),
+      });
+      mockComplaintModel.findOne.mockReturnValue({
         exec: jest.fn().mockResolvedValue(null),
       });
 
       await expect(
-        service.findById('CASE-2026-999999', mockInvestigator1),
-      ).rejects.toThrow(NotFoundException);
+        service.findById('CASE-2026-123456', mockOtherCitizen),
+      ).rejects.toThrow(ForbiddenException);
     });
   });
 
   describe('Authorization: updateStatus', () => {
-    it('should allow the assigned investigator to update case status', async () => {
+    it('should allow the assigned investigator to update case status and sync to linked complaint', async () => {
       const mockDoc = createMockCaseDoc('inv-uid-1');
       mockCaseModel.findOne.mockReturnValue({
         exec: jest.fn().mockResolvedValue(mockDoc),
+      });
+      const mockComplaint = createMockComplaintDoc();
+      mockComplaintModel.findOne.mockReturnValue({
+        exec: jest.fn().mockResolvedValue(mockComplaint),
       });
 
       const result = await service.updateStatus(
@@ -313,6 +346,19 @@ describe('CasesService', () => {
 
       expect(result.status).toBe(CaseStatus.UNDER_INVESTIGATION);
       expect(mockDoc.save).toHaveBeenCalled();
+
+      // Verify case status was recorded in case history / timeline
+      const lastCaseTimeline = result.statusTimeline[result.statusTimeline.length - 1];
+      expect(lastCaseTimeline.status).toBe(CaseStatus.UNDER_INVESTIGATION);
+      expect(lastCaseTimeline.note).toBe('Started field work');
+      expect(lastCaseTimeline.updatedBy).toBe('Sarah Connor');
+
+      // Verify sync to complaint
+      expect(mockComplaint.caseStatus).toBe(CaseStatus.UNDER_INVESTIGATION);
+      expect(mockComplaint.save).toHaveBeenCalled();
+      const lastComplaintTimeline = mockComplaint.statusTimeline[mockComplaint.statusTimeline.length - 1];
+      expect(lastComplaintTimeline.status).toBe(ComplaintStatus.CONVERTED_TO_CASE);
+      expect(lastComplaintTimeline.note).toBe('Started field work');
     });
 
     it('should reject modification from an investigator NOT assigned to the case', async () => {

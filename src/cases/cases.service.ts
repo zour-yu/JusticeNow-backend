@@ -473,25 +473,30 @@ export class CasesService {
     return await this.caseModel.find(filter).sort({ updatedAt: -1 }).exec();
   }
 
-  async findAll(user: User, status?: CaseStatus): Promise<any[]> {
+  async findAll(user: User, status?: CaseStatus, category?: string): Promise<any[]> {
     if (user.role === UserRole.INVESTIGATOR) {
       return this.findAssignedCases(user, status);
     }
 
     const filter: Record<string, any> = {};
     if (status) filter.status = status;
+    if (category) filter.category = category;
 
     const cases = await this.caseModel.find(filter).sort({ updatedAt: -1 }).exec();
 
     // Also include approved complaints awaiting assignment
     if (!status || status === CaseStatus.NEW) {
+      const complaintFilter: any = {
+        status: ComplaintStatus.APPROVED,
+        $or: [{ caseId: { $exists: false } }, { caseId: '' }, { caseId: null }],
+      };
+      if (category) complaintFilter.category = category;
+
       const approvedComplaints = await this.complaintModel
-        .find({
-          status: ComplaintStatus.APPROVED,
-          $or: [{ caseId: { $exists: false } }, { caseId: '' }, { caseId: null }],
-        })
+        .find(complaintFilter)
         .sort({ updatedAt: -1 })
         .exec();
+
 
       const virtualUnassignedCases = approvedComplaints.map((comp) => {
         const createdAt = (comp as any).createdAt || new Date();
@@ -553,6 +558,59 @@ export class CasesService {
       throw new NotFoundException(`Case not found with identifier: ${idOrCaseNumber}`);
     }
 
+    // Role-based authorization for Citizen
+    if (user && user.role === UserRole.CITIZEN) {
+      const userIdentifier = this.getUserIdentifier(user);
+      const isOwnerByEmail = Boolean(
+        caseDoc.complaintDetails?.citizenEmail &&
+        user.email &&
+        caseDoc.complaintDetails.citizenEmail.toLowerCase() === user.email.toLowerCase()
+      );
+
+      let isOwner = isOwnerByEmail;
+      if (!isOwner && caseDoc.complaintId) {
+        let complaint: ComplaintDocument | null = null;
+        if (caseDoc.complaintId.startsWith('JN-')) {
+          complaint = (await this.complaintModel.findOne?.({ trackingNumber: caseDoc.complaintId })?.exec?.()) ?? null;
+        } else {
+          try {
+            complaint = (await this.complaintModel.findById?.(caseDoc.complaintId)?.exec?.()) ?? null;
+          } catch {
+            complaint = (await this.complaintModel.findOne?.({ trackingNumber: caseDoc.complaintId })?.exec?.()) ?? null;
+          }
+        }
+
+        if (
+          complaint &&
+          (complaint.citizenId === userIdentifier ||
+            (complaint.citizenEmail && user.email && complaint.citizenEmail.toLowerCase() === user.email.toLowerCase()))
+        ) {
+          isOwner = true;
+        }
+      }
+
+      if (!isOwner) {
+        throw new ForbiddenException('You are not authorized to view this case.');
+      }
+
+      // Chronological sort and redact confidential internal investigation notes for citizen
+      const caseObj = caseDoc.toObject ? caseDoc.toObject() : { ...caseDoc };
+      if (caseObj.statusTimeline && Array.isArray(caseObj.statusTimeline)) {
+        caseObj.statusTimeline.sort(
+          (a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+        );
+      }
+      caseObj.investigationNotes = [];
+      delete caseObj.assignedInvestigatorEmail;
+      return caseObj as any;
+    }
+
+    if (caseDoc.statusTimeline && Array.isArray(caseDoc.statusTimeline)) {
+      caseDoc.statusTimeline.sort(
+        (a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+      );
+    }
+
     return caseDoc;
   }
 
@@ -588,6 +646,40 @@ export class CasesService {
     });
 
     const savedCase = await caseDoc.save();
+
+    // Sync status and timeline entry to linked citizen complaint
+    if (savedCase.complaintId) {
+      try {
+        let complaint: ComplaintDocument | null = null;
+        if (savedCase.complaintId.startsWith('JN-')) {
+          complaint = (await this.complaintModel.findOne?.({ trackingNumber: savedCase.complaintId })?.exec?.()) ?? null;
+        } else {
+          try {
+            complaint = (await this.complaintModel.findById?.(savedCase.complaintId)?.exec?.()) ?? null;
+          } catch {
+            complaint = (await this.complaintModel.findOne?.({ trackingNumber: savedCase.complaintId })?.exec?.()) ?? null;
+          }
+        }
+
+        if (!complaint && savedCase.caseNumber) {
+          complaint = (await this.complaintModel.findOne?.({ caseId: savedCase.caseNumber })?.exec?.()) ?? null;
+        }
+
+        if (complaint) {
+          complaint.caseStatus = dto.status;
+          complaint.statusTimeline.push({
+            status: ComplaintStatus.CONVERTED_TO_CASE,
+            title: statusTitleMap[dto.status] || `Case Status: ${dto.status.replace(/_/g, ' ')}`,
+            note: dto.note || `Case status updated to ${dto.status.replace(/_/g, ' ')} by ${updaterName}.`,
+            updatedBy: updaterName,
+            timestamp: new Date(),
+          });
+          await complaint.save();
+        }
+      } catch (err) {
+        console.error('Failed to sync case status to complaint', err);
+      }
+    }
 
     // Notify Investigator
     if (savedCase.assignedInvestigatorId) {

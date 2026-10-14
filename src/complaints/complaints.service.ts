@@ -74,10 +74,20 @@ export class ComplaintsService {
 
   async findMyComplaints(user: User): Promise<Complaint[]> {
     const citizenIdentifier = user.firebaseUid || (user as any)._id?.toString();
-    return await this.complaintModel
+    const complaints = await this.complaintModel
       .find({ citizenId: citizenIdentifier })
       .sort({ createdAt: -1 })
       .exec();
+
+    complaints.forEach((c) => {
+      if (c.statusTimeline && Array.isArray(c.statusTimeline)) {
+        c.statusTimeline.sort(
+          (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+        );
+      }
+    });
+
+    return complaints;
   }
 
   async findById(idOrTracking: string, user?: User): Promise<Complaint> {
@@ -103,6 +113,12 @@ export class ComplaintsService {
       if (complaint.citizenId !== citizenIdentifier) {
         throw new ForbiddenException('You are not authorized to view this complaint.');
       }
+    }
+
+    if (complaint.statusTimeline && Array.isArray(complaint.statusTimeline)) {
+      complaint.statusTimeline.sort(
+        (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+      );
     }
 
     return complaint;

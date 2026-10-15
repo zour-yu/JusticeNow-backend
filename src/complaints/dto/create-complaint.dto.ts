@@ -44,6 +44,9 @@ export class EvidenceItemDto {
 
   @IsOptional()
   size?: number;
+
+  @IsOptional()
+  uploadedAt?: string;
 }
 
 export class CreateComplaintDto {
